@@ -1628,3 +1628,112 @@ def to_csv_overload(df, path_or_buf=None, sep=',', na_rep='', float_format=None,
                       date_format, doublequote, escapechar, decimal)
 
     return _impl
+
+if not sdc.config.config_pipeline_hpat_default:
+
+    class DataFrameGroupByType(types.Type):
+        """
+        Type definition for SeriesGroupBy functions handling.
+        """
+
+        def __init__(self, parent, column_id):
+            self.parent = parent
+            self.column_id = column_id
+            super(DataFrameGroupByType, self).__init__(f'DataFrameGroupByType({parent}, {column_id})')
+            # super(DataFrameGroupByType, self).__init__(f'DataFrameGroupByType({parent}, {column_id})')
+
+
+    @register_model(DataFrameGroupByType)
+    class DataFrameGroupByTypeModel(models.StructModel):
+        """
+        Model for DataFrameGroupByType type
+        """
+
+        def __init__(self, dmm, fe_type):
+            column_dtype = fe_type.parent.data[fe_type.column_id.literal_value].dtype
+            parent = fe_type.parent
+            data = types.DictType(column_dtype, numba.types.ListType(numba.types.int64))
+            members = [
+                ('parent', parent),
+                ('column_id', numba.types.int64),
+                ('data', data),
+            ]
+            models.StructModel.__init__(self, dmm, fe_type, members)
+
+
+    make_attribute_wrapper(DataFrameGroupByType, 'data', '_data')
+    make_attribute_wrapper(DataFrameGroupByType, 'parent', '_parent')
+    make_attribute_wrapper(DataFrameGroupByType, 'column_id', '_column_id')
+
+    @intrinsic
+    def _hpat_pandas_dataframe_groupby_init(typingctx, parent, column_id, data):
+
+        def _hpat_pandas_dataframe_groupby_init_codegen(context, builder, signature, args):
+
+            # print('Hellllo!')
+            # import pdb; pdb.set_trace()
+            parent_val, column_id_val, data_val = args
+            groupby = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+            groupby.parent = parent_val
+            groupby.column_id = column_id_val
+            groupby.data = data_val
+
+            if context.enable_nrt:
+                context.nrt.incref(builder, parent, groupby.parent)
+                context.nrt.incref(builder, data, groupby.data)
+
+            return groupby._getvalue()
+            # return 1
+
+        # import pdb; pdb.set_trace()
+        ret_type = DataFrameGroupByType(parent, column_id)
+        # ret_type = DataFrameType(parent.data, parent.index, parent.columns, parent.has_parent)
+        sig = signature(ret_type, parent, column_id, data)
+        """
+        Construct signature of the Numba DataFrameGroupByType::ctor()
+        """
+
+        return sig, _hpat_pandas_dataframe_groupby_init_codegen
+
+    @overload_method(DataFrameType, 'groupby')
+    def dataframe_groupby_ovelroad(self, by=None, axis=0, level=None, as_index=True, sort=True,
+                                group_keys=True, squeeze=False, observed=False):
+
+        from numba import typed
+        if (not isinstance(by, types.Literal)):
+            return None
+
+        column_id = self.columns.index(by.literal_value)
+        list_type = numba.types.ListType(types.intp)
+        by_type = self.data[column_id].dtype
+
+        def impl(self, by=None, axis=0, level=None, as_index=True, sort=True,
+                group_keys=True, squeeze=False, observed=False):
+
+            d = typed.Dict.empty(key_type=by_type, value_type=list_type)
+            for i, v in enumerate(self._data[column_id]):
+                lst = d.get(v, numba.typed.List.empty_list(types.intp))
+                lst.append(i)
+                d[v] = lst
+
+            return _hpat_pandas_dataframe_groupby_init(self, column_id, d)
+
+        return impl
+
+    @overload_method(DataFrameGroupByType, 'min')
+    def dataframe_groupby_min_overload(self):
+        from numba import prange
+
+        def impl(self):
+            index = [key for key in self._data]
+
+            data_0 = self._parent._data[1]
+            result_0 = np.empty(len(index), dtype=np.int64)
+
+            for i, value in enumerate(self._data.values()):
+                arr = [data_0[v] for v in value]
+                result_0[i] = min(arr)
+
+            return pd.DataFrame({'B': result_0}, index=index)
+
+        return impl

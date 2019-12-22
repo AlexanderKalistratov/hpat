@@ -48,6 +48,20 @@ _pivot_df1 = pd.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
 
 
 class TestGroupBy(TestCase):
+
+    @skip_sdc_jit
+    def test_simple_groupby(self):
+        def test_impl():
+            d = pd.DataFrame({'A': ['foo', 'foo', 'bar', 'bar', 'baz'], 'B': [0, 1, 2, 3, 4]})
+            gb = d.groupby('A')
+
+            d1 = gb.min()
+
+            return d1
+
+        hpat_func = self.jit(test_impl)
+        pd.testing.assert_frame_equal(hpat_func(), test_impl())
+
     @skip_sdc_jit
     @skip_numba_jit
     def test_agg_seq(self):
