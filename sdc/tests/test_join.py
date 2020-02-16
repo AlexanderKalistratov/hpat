@@ -47,6 +47,65 @@ from sdc.tests.test_utils import (count_array_OneDs,
 
 
 class TestJoin(TestCase):
+    def test_pandas_left_join(self):
+        def test_impl(left, right, on=None, left_on=None, right_on=None):
+            return pd.merge(left, right, how='inner', on=None, left_on='B', right_on='right_D')
+
+        n = 10**6
+
+        np.random.seed(0)
+
+        ones = np.ones(shape=n, dtype=np.int_)
+        rnge = np.arange(n)
+        dbl_rnge = 2*np.arange(n)
+        trpl_rnge = 3*np.arange(n)
+        rand = np.random.ranf(n)
+
+        left = pd.DataFrame({'A': ones, 'B': rnge, 'left_C': dbl_rnge, 'left_D': trpl_rnge, 'left_E': rand})
+        right = pd.DataFrame({'A': ones, 'B': rnge, 'right_C': dbl_rnge, 'right_D': trpl_rnge, 'right_E': rand})
+
+        ons = [#{'on': 'A', 'left_on': None, 'right_on': None},
+               #{'on': 'B', 'left_on': None, 'right_on': None},
+               #{'on': ('A', 'B'), 'left_on': None, 'right_on': None},
+               {'on': None, 'left_on': 'A', 'right_on': 'B'},
+               {'on': None, 'left_on': 'B', 'right_on': 'A'},
+               {'on': None, 'left_on': 'left_C', 'right_on': 'right_D'},
+               {'on': None, 'left_on': ('B', 'left_C'), 'right_on': ('B', 'right_D')}]
+
+        sdc_func = self.jit(test_impl)
+        # for on in ons:
+        #     with self.subTest(on=on):
+                # ref = test_impl(left, right, **on)
+                # sdc = sdc_func(left, right, **on)
+        import time
+        start = time.time()
+        ref = test_impl(left, right)
+        end = time.time()
+        print(end - start)
+        sdc = sdc_func(left, right)
+
+        start = time.time()
+        sdc = sdc_func(left, right)
+        end = time.time()
+        print(end - start)
+        # print(ref)
+        # print(sdc)
+        pd.testing.assert_frame_equal(sdc, ref, check_dtype=False)
+
+    def test_df_getitem(self):
+        def test_impl():
+            n = 10
+            df = pd.DataFrame({'A': np.arange(n), 'B': np.random.ranf(n)})
+
+            cols = ('A', 'B')
+
+            for name in numba.literal_unroll(cols):
+                df[name].fillna(-1, inplace=True)
+
+            return df
+
+        f = self.jit(test_impl)
+        print(test_impl())
 
     @skip_numba_jit
     def test_join1(self):
@@ -260,7 +319,6 @@ class TestJoin(TestCase):
         hpat_func = self.jit(test_impl)
         self.assertEqual(hpat_func(), test_impl())
 
-    @skip_numba_jit
     def test_join_left_seq1(self):
         def test_impl(df1, df2):
             return pd.merge(df1, df2, how='left', on='key')
@@ -278,7 +336,6 @@ class TestJoin(TestCase):
         self.assertEqual(
             set(h_res.B.dropna().values), set(res.B.dropna().values))
 
-    @skip_numba_jit
     def test_join_left_seq2(self):
         def test_impl(df1, df2):
             return pd.merge(df1, df2, how='left', on='key')

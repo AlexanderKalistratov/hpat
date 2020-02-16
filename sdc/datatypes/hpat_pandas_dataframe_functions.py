@@ -974,17 +974,18 @@ def gen_df_getitem_str_literal_idx_impl(self, idx):
     return _impl
 
 
-def gen_df_getitem_unicode_idx_impl(self):
+def gen_df_getitem_unicode_idx_impl(self, idx):
     df_is_empty = False if self.columns else True
 
+    col_idx = self._columns.index(idx.literal_value)
     def _df_getitem_unicode_idx_impl(self, idx):
         if df_is_empty == False:  # noqa
             if idx not in self._columns:
                 raise KeyError
 
-            literal_idx = literally(idx)
-            col_idx = self._columns.index(literal_idx)
-            res_data = get_dataframe_data(self, col_idx)
+            # literal_idx = literally(idx)
+            # col_idx = self._columns.index(idx)
+            res_data = get_dataframe_data(self, literally(col_idx))
 
             return pandas.Series(res_data, index=self._index, name=idx)
         else:
@@ -995,7 +996,6 @@ def gen_df_getitem_unicode_idx_impl(self):
 
 @sdc_overload(operator.getitem)
 def sdc_pandas_dataframe_getitem(self, idx):
-
     if not isinstance(self, DataFrameType):
         return None
 
@@ -1003,7 +1003,7 @@ def sdc_pandas_dataframe_getitem(self, idx):
         return gen_df_getitem_str_literal_idx_impl(self, idx.literal_value)
 
     if isinstance(idx, types.UnicodeType):
-        return gen_df_getitem_unicode_idx_impl(self)
+        return gen_df_getitem_unicode_idx_impl(self, idx)
 
     ty_checker = TypeChecker('Operator getitem().')
     ty_checker.raise_exc(idx, 'str', 'idx')

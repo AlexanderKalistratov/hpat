@@ -168,3 +168,12 @@ def find_common_dtype_from_numpy_dtypes(array_types, scalar_types):
     numba_common_dtype = numpy_support.from_dtype(np_common_dtype)
 
     return numba_common_dtype
+
+def is_default(var, default = None):
+    if isinstance(var, (types.Omitted)):
+        return True
+
+    if default is None:
+        return isinstance(var, types.NoneType) or var is None
+
+    return var == default or has_literal_value(var, default)

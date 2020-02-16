@@ -65,6 +65,7 @@ if not sdc.config.config_pipeline_hpat_default:
     import sdc.rewrites.dataframe_constructor
     import sdc.datatypes.hpat_pandas_functions
     import sdc.datatypes.hpat_pandas_dataframe_functions
+    import sdc.datatypes.sdc_pandas_general_functions
 else:
     import sdc.compiler
 
